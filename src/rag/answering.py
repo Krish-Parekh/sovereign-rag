@@ -1,10 +1,11 @@
 import asyncio
 import time
-from collections.abc import AsyncGenerator, AsyncIterator, Awaitable
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Generator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 
 import anyio
-from opentelemetry.trace import StatusCode
+from opentelemetry.trace import Span, StatusCode
 
 from rag.chat_store import load_history, save_turn
 from rag.deps import Deps
@@ -110,7 +111,7 @@ async def _generate(deps: Deps, caller: Caller, question: str, run: Run) -> Asyn
 
 async def _rewrite(deps: Deps, history: list[Turn], question: str, run: Run) -> str:
     started = time.perf_counter()
-    with tracer.start_as_current_span("rewrite", attributes=_model_attributes(deps, run)) as span:
+    with _step_span("rewrite", _model_attributes(deps, run)) as span:
         completion = await deps.chat.chat.completions.create(
             model=deps.settings.chat_model,
             messages=rewrite_messages(history, question),
@@ -126,7 +127,7 @@ async def _rewrite(deps: Deps, history: list[Turn], question: str, run: Run) -> 
 
 async def _retrieve(deps: Deps, query: str, run: Run) -> list[Hit]:
     started = time.perf_counter()
-    with tracer.start_as_current_span("retrieve", attributes=_ids(run)) as span:
+    with _step_span("retrieve", _ids(run)) as span:
         hits = await asyncio.to_thread(retrieve, deps.knowledge, deps.settings.knowledge_base_id, query)
         span.set_attribute("hits", len(hits))
         if hits:
@@ -221,6 +222,18 @@ async def _finish(deps: Deps, caller: Caller, run: Run) -> None:
         )
         metrics.flush_metrics()
         await asyncio.to_thread(flush_spans)
+
+
+@contextmanager
+def _step_span(name: str, attributes: dict[str, str]) -> Generator[Span]:
+    with tracer.start_as_current_span(
+        name, attributes=attributes, record_exception=False, set_status_on_exception=False
+    ) as span:
+        try:
+            yield span
+        except Exception:
+            span.set_status(StatusCode.ERROR)
+            raise
 
 
 def _ids(run: Run) -> dict[str, str]:

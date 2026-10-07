@@ -470,3 +470,25 @@ async def test_disconnect_through_the_app_still_saves_the_assistant_turn(harness
         gc.enable()
 
     assert sorted(roles) == ["assistant", "user"]
+
+
+async def test_failed_retrieval_keeps_retrieved_text_out_of_spans(
+    harness: Harness, spans: InMemorySpanExporter
+) -> None:
+    broken: dict[str, object] = {
+        "content": {"text": "SECRET corpus text", "type": "TEXT"},
+        "metadata": {"article_id": "a1", "url": "https://wix.com/a1"},
+    }
+    harness.expect_retrieve(QUESTION, results=[broken])
+
+    stream = await harness.ask(QUESTION)
+
+    assert stream.done.status == "incomplete"
+    messages = [
+        event.attributes.get("exception.message")
+        for span in spans.get_finished_spans()
+        for event in span.events
+        if event.attributes is not None
+    ]
+    assert [m for m in messages if m is not None] == []
+    assert [s.status.description for s in spans.get_finished_spans() if s.status.description] == []
