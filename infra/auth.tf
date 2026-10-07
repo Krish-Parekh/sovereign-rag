@@ -19,8 +19,12 @@ resource "aws_cognito_user_pool" "users" {
     temporary_password_validity_days = 1
   }
 
-  software_token_mfa_configuration {
-    enabled = var.mfa_configuration != "OFF"
+  dynamic "software_token_mfa_configuration" {
+    for_each = var.mfa_configuration == "ON" ? [true] : []
+
+    content {
+      enabled = true
+    }
   }
 
   account_recovery_setting {
