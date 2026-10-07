@@ -29,3 +29,16 @@ output "data_source_id" {
 output "chat_table" {
   value = aws_dynamodb_table.chat.name
 }
+
+output "ask_url" {
+  value = "${aws_api_gateway_stage.v1.invoke_url}/ask"
+}
+
+output "api_key" {
+  value     = aws_api_gateway_api_key.tester.value
+  sensitive = true
+}
+
+output "ask_function" {
+  value = aws_lambda_function.ask.function_name
+}
