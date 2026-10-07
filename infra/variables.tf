@@ -12,3 +12,8 @@ variable "chat_model" {
   type    = string
   default = "qwen.qwen3-32b-v1:0"
 }
+
+variable "alert_email" {
+  type        = string
+  description = "Address that receives alarm emails. Confirm the subscription from the inbox."
+}

@@ -42,3 +42,7 @@ output "api_key" {
 output "ask_function" {
   value = aws_lambda_function.ask.function_name
 }
+
+output "dashboard_url" {
+  value = "https://${var.region}.console.aws.amazon.com/cloudwatch/home?region=${var.region}#dashboards/dashboard/${aws_cloudwatch_dashboard.main.dashboard_name}"
+}
