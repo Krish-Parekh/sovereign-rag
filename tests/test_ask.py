@@ -1,3 +1,6 @@
+import asyncio
+import contextlib
+import gc
 import io
 import json
 import logging
@@ -13,6 +16,7 @@ from fakes import MODEL, FakeBedrock
 from moto import mock_aws
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from pydantic import BaseModel
+from starlette.types import Message, Scope
 from types_boto3_dynamodb.service_resource import Table
 
 from ask.main import app, get_deps
@@ -414,3 +418,55 @@ async def test_logs_carry_no_question_or_answer(harness: Harness, log_stream: io
     assert QUESTION not in out
     assert "Open Settings" not in out
     assert '"request_id"' in out
+
+
+async def test_disconnect_through_the_app_still_saves_the_assistant_turn(harness: Harness) -> None:
+    harness.fake.tokens = [f"t{n} " for n in range(50)]
+    harness.expect_retrieve(QUESTION)
+    pending: list[Message] = [{"type": "http.request", "body": json.dumps({"question": QUESTION}).encode()}]
+    disconnected = asyncio.Event()
+    sent: list[Message] = []
+    scope: Scope = {
+        "type": "http",
+        "asgi": {"version": "3.0", "spec_version": "2.4"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": "/ask",
+        "raw_path": b"/ask",
+        "query_string": b"",
+        "root_path": "",
+        "headers": [(b"content-type", b"application/json"), (b"x-amzn-request-context", context("sub-a").encode())],
+        "client": ("127.0.0.1", 1),
+        "server": ("test", 80),
+        "state": {},
+    }
+
+    async def receive() -> Message:
+        if pending:
+            return pending.pop()
+        await disconnected.wait()
+        return {"type": "http.disconnect"}
+
+    async def send(message: Message) -> None:
+        if message["type"] == "http.response.body":
+            sent.append(message)
+            await asyncio.sleep(0.1)
+            if len(sent) > 3:
+                disconnected.set()
+                raise OSError("client gone")
+
+    gc.disable()
+    try:
+        with contextlib.suppress(Exception):
+            await app(scope, receive, send)
+        roles: list[str] = []
+        for _ in range(20):
+            roles = [str(item["role"]) for item in harness.deps.table.scan().get("Items", [])]
+            if "assistant" in roles:
+                break
+            await asyncio.sleep(0.05)
+    finally:
+        gc.enable()
+
+    assert sorted(roles) == ["assistant", "user"]

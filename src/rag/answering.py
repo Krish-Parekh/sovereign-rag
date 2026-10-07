@@ -1,6 +1,6 @@
 import asyncio
 import time
-from collections.abc import AsyncIterator, Awaitable
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable
 from dataclasses import dataclass, field
 
 import anyio
@@ -58,7 +58,7 @@ class Run:
         return await asyncio.wait_for(step, max(self.started + self.budget_s - time.perf_counter(), 0))
 
 
-async def answer(deps: Deps, caller: Caller, request: AskRequest, request_id: str) -> AsyncIterator[SseEvent]:
+async def answer(deps: Deps, caller: Caller, request: AskRequest, request_id: str) -> AsyncGenerator[SseEvent]:
     run = Run(
         request_id=request_id,
         conversation_id=request.conversation_id or new_id(),

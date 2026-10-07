@@ -10,6 +10,7 @@ from rag.answering import answer
 from rag.auth import caller_from_context, request_id_from_context
 from rag.config import get_settings
 from rag.deps import Deps, build_deps
+from rag.relay import relay
 from rag.schemas import AskRequest, Caller
 from rag.telemetry import logger
 from rag.tracing import current_trace_id, flushing
@@ -48,5 +49,5 @@ async def ask(
     request_id: Annotated[str, Depends(get_request_id)],
 ) -> AsyncIterator[ServerSentEvent]:
     logger.append_keys(request_id=request_id, trace_id=current_trace_id())
-    async for event in answer(deps, caller, body, request_id):
+    async for event in relay(answer(deps, caller, body, request_id)):
         yield ServerSentEvent(data=event, event=event.name)
