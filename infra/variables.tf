@@ -17,3 +17,14 @@ variable "alert_email" {
   type        = string
   description = "Address that receives alarm emails. Confirm the subscription from the inbox."
 }
+
+variable "mfa_configuration" {
+  type        = string
+  default     = "ON"
+  description = "Cognito MFA. ON (TOTP required) is the design. OFF is for short tests only."
+
+  validation {
+    condition     = contains(["ON", "OFF"], var.mfa_configuration)
+    error_message = "Use ON or OFF."
+  }
+}

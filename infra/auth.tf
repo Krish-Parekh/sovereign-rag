@@ -3,7 +3,7 @@ resource "aws_cognito_user_pool" "users" {
   user_pool_tier           = "ESSENTIALS"
   username_attributes      = ["email"]
   auto_verified_attributes = ["email"]
-  mfa_configuration        = "ON"
+  mfa_configuration        = var.mfa_configuration
   deletion_protection      = "INACTIVE"
 
   admin_create_user_config {
@@ -20,7 +20,7 @@ resource "aws_cognito_user_pool" "users" {
   }
 
   software_token_mfa_configuration {
-    enabled = true
+    enabled = var.mfa_configuration != "OFF"
   }
 
   account_recovery_setting {
