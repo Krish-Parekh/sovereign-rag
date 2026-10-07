@@ -14,7 +14,6 @@ def test_settings_point_chat_at_sydney_runtime() -> None:
     assert settings.region == "ap-southeast-2"
     assert settings.chat_model == "qwen.qwen3-32b-v1:0"
     assert settings.chat_base_url == "https://bedrock-runtime.ap-southeast-2.amazonaws.com/openai/v1"
-    assert settings.otel_exporter_otlp_traces_endpoint is None
 
 
 def test_ask_request_strips_question() -> None:

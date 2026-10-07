@@ -11,7 +11,6 @@ class Settings(BaseSettings):
     knowledge_base_id: str
     chat_table: str
     answer_timeout_s: float = 270.0
-    otel_exporter_otlp_traces_endpoint: str | None = None
 
     @property
     def chat_base_url(self) -> str:
