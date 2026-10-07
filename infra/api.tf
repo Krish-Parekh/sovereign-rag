@@ -114,6 +114,7 @@ resource "aws_lambda_function" "ask" {
       AWS_LAMBDA_EXEC_WRAPPER                            = "/opt/bootstrap"
       AWS_LWA_INVOKE_MODE                                = "response_stream"
       AWS_LWA_PORT                                       = "8080"
+      PYTHONUNBUFFERED                                   = "1"
       KNOWLEDGE_BASE_ID                                  = aws_bedrockagent_knowledge_base.help_centre.id
       CHAT_TABLE                                         = aws_dynamodb_table.chat.name
       CHAT_MODEL                                         = var.chat_model
