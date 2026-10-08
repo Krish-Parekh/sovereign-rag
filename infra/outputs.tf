@@ -43,6 +43,10 @@ output "ask_function" {
   value = aws_lambda_function.ask.function_name
 }
 
-output "dashboard_url" {
-  value = "https://${var.region}.console.aws.amazon.com/cloudwatch/home?region=${var.region}#dashboards/dashboard/${aws_cloudwatch_dashboard.main.dashboard_name}"
+output "guardrail_id" {
+  value = aws_bedrock_guardrail.ask.guardrail_id
+}
+
+output "guardrail_version" {
+  value = aws_bedrock_guardrail_version.ask.version
 }

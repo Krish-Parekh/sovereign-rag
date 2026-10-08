@@ -1,53 +1,33 @@
-import asyncio
-from collections.abc import AsyncGenerator, AsyncIterator
-from contextlib import asynccontextmanager
-from typing import Annotated
+import json
+from typing import Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
-from fastapi.sse import EventSourceResponse, ServerSentEvent
+from aws_lambda_powertools import Logger
+from pydantic import ValidationError
 
-from rag.answering import answer
-from rag.auth import caller_from_context, request_id_from_context
-from rag.config import get_settings
-from rag.deps import Deps, build_deps
-from rag.relay import relay
-from rag.schemas import AskRequest, Caller
-from rag.telemetry import logger
-from rag.tracing import current_trace_id, flushing
+from rag.answering import answer, caller_from_claims
+from rag.schemas import AskRequest
+
+logger = Logger(service="sovereign-rag")
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-    app.state.deps = await asyncio.to_thread(build_deps, get_settings())
-    yield
-
-
-app = FastAPI(title="sovereign-rag", lifespan=lifespan)
-asgi = flushing(app)
-
-
-def get_deps(request: Request) -> Deps:
-    return request.app.state.deps
-
-
-def get_caller(x_amzn_request_context: Annotated[str | None, Header()] = None) -> Caller:
-    caller = caller_from_context(x_amzn_request_context)
+def handler(event: dict[str, Any], context: object) -> dict[str, Any]:
+    caller = caller_from_claims(event["requestContext"]["authorizer"]["claims"])
     if caller is None:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    return caller
+        return _response(401, {"error": "unauthorized"})
+    try:
+        request = AskRequest.model_validate_json(event["body"] or "")
+    except ValidationError:
+        return _response(400, {"error": "invalid request"})
+    try:
+        result = answer(caller, request)
+    except Exception as exc:
+        logger.error("ask failed", extra={"error": type(exc).__name__})
+        return _response(500, {"error": "internal error"})
+    logger.info(
+        "done", extra={"conversation_id": result["conversation_id"], "role": caller.role, "status": result["status"]}
+    )
+    return _response(200, result)
 
 
-def get_request_id(x_amzn_lambda_context: Annotated[str | None, Header()] = None) -> str:
-    return request_id_from_context(x_amzn_lambda_context)
-
-
-@app.post("/ask", response_class=EventSourceResponse)
-async def ask(
-    body: AskRequest,
-    deps: Annotated[Deps, Depends(get_deps)],
-    caller: Annotated[Caller, Depends(get_caller)],
-    request_id: Annotated[str, Depends(get_request_id)],
-) -> AsyncIterator[ServerSentEvent]:
-    logger.append_keys(request_id=request_id, trace_id=current_trace_id())
-    async for event in relay(answer(deps, caller, body, request_id)):
-        yield ServerSentEvent(data=event, event=event.name)
+def _response(status_code: int, body: dict[str, Any]) -> dict[str, Any]:
+    return {"statusCode": status_code, "headers": {"content-type": "application/json"}, "body": json.dumps(body)}

@@ -13,18 +13,21 @@ variable "chat_model" {
   default = "qwen.qwen3-32b-v1:0"
 }
 
-variable "alert_email" {
-  type        = string
-  description = "Address that receives alarm emails. Confirm the subscription from the inbox."
+
+variable "api_rate_limit" {
+  type        = number
+  default     = 200
+  description = "Steady requests per second for the API key. 200 matches the default Lambda concurrency of 1,000 at about 5 s per answer."
 }
 
-variable "mfa_configuration" {
-  type        = string
-  default     = "ON"
-  description = "Cognito MFA. ON (TOTP required) is the design. OFF is for short tests only."
+variable "api_burst_limit" {
+  type        = number
+  default     = 400
+  description = "Requests the API key may send at once before API Gateway returns 429."
+}
 
-  validation {
-    condition     = contains(["ON", "OFF"], var.mfa_configuration)
-    error_message = "Use ON or OFF."
-  }
+variable "api_daily_quota" {
+  type        = number
+  default     = 0
+  description = "Requests per day for the API key. 0 means no daily quota."
 }

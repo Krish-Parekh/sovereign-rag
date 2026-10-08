@@ -1,6 +1,5 @@
 .venv/
 __pycache__/
-.pytest_cache/
 .ruff_cache/
 .env
 build/
@@ -13,5 +12,7 @@ build/
 !*.tfvars.example
 backend.hcl
 
-docs/
+docs/*
+!docs/architecture/
 *.md
+!/README.md

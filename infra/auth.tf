@@ -3,7 +3,7 @@ resource "aws_cognito_user_pool" "users" {
   user_pool_tier           = "ESSENTIALS"
   username_attributes      = ["email"]
   auto_verified_attributes = ["email"]
-  mfa_configuration        = var.mfa_configuration
+  mfa_configuration        = "OFF"
   deletion_protection      = "INACTIVE"
 
   admin_create_user_config {
@@ -17,14 +17,6 @@ resource "aws_cognito_user_pool" "users" {
     require_numbers                  = true
     require_symbols                  = true
     temporary_password_validity_days = 1
-  }
-
-  dynamic "software_token_mfa_configuration" {
-    for_each = var.mfa_configuration == "ON" ? [true] : []
-
-    content {
-      enabled = true
-    }
   }
 
   account_recovery_setting {
@@ -83,4 +75,10 @@ resource "aws_cognito_managed_login_branding" "cli" {
   user_pool_id                = aws_cognito_user_pool.users.id
   client_id                   = aws_cognito_user_pool_client.cli.id
   use_cognito_provided_values = true
+}
+
+resource "aws_cognito_user_group" "staff" {
+  name         = "staff"
+  user_pool_id = aws_cognito_user_pool.users.id
+  description  = "Support staff: also retrieve known issues and feature requests"
 }

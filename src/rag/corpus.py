@@ -1,20 +1,20 @@
+import json
 import logging
 import random
 import time
-from collections.abc import Callable
 
 import httpx
 from pydantic import BaseModel
 from types_boto3_bedrock_agent import AgentsforBedrockClient
+from types_boto3_bedrock_agent.type_defs import IngestionJobTypeDef
 from types_boto3_s3 import S3Client
-
-from rag.schemas import Article, CorpusMetadata, IngestionJob
 
 CORPUS_URL = (
     "https://huggingface.co/datasets/Wix/WixQA/resolve/d662dc42479c14e202eccd832f8c4b66a035c4cc"
     "/wix_kb_corpus/wix_kb_corpus.jsonl"
 )
-POLL_S = 10.0
+FINISHED = {"COMPLETE", "FAILED", "STOPPED"}
+COUNTS = {"article": 400, "known_issue": 63, "feature_request": 100}
 
 log = logging.getLogger("corpus")
 
@@ -32,22 +32,37 @@ def load_rows(url: str = CORPUS_URL) -> list[CorpusRow]:
         return [CorpusRow.model_validate_json(line) for line in response.iter_lines() if line.strip()]
 
 
-def select_articles(rows: list[CorpusRow], count: int, seed: int) -> list[Article]:
-    articles = sorted(
-        (Article(id=row.id, url=row.url, contents=row.contents) for row in rows if row.article_type == "article"),
-        key=lambda article: article.id,
+def select_articles(rows: list[CorpusRow], seed: int) -> list[CorpusRow]:
+    selected: list[CorpusRow] = []
+    for article_type, count in COUNTS.items():
+        of_type = sorted((row for row in rows if row.article_type == article_type), key=lambda row: row.id)
+        selected += random.Random(seed).sample(of_type, min(count, len(of_type)))
+    return selected
+
+
+def metadata_json(article: CorpusRow) -> str:
+    def attribute(value: str) -> dict[str, object]:
+        return {"value": {"type": "STRING", "stringValue": value}, "includeForEmbedding": False}
+
+    return json.dumps(
+        {
+            "metadataAttributes": {
+                "article_id": attribute(article.id),
+                "url": attribute(article.url),
+                "article_type": attribute(article.article_type),
+            }
+        }
     )
-    return random.Random(seed).sample(articles, min(count, len(articles)))
 
 
-def upload(s3: S3Client, bucket: str, articles: list[Article]) -> None:
+def upload(s3: S3Client, bucket: str, articles: list[CorpusRow]) -> None:
     for article in articles:
         key = f"corpus/{article.id}.md"
         s3.put_object(Bucket=bucket, Key=key, Body=article.contents.encode(), ContentType="text/markdown")
         s3.put_object(
             Bucket=bucket,
             Key=f"{key}.metadata.json",
-            Body=CorpusMetadata.for_article(article).model_dump_json().encode(),
+            Body=metadata_json(article).encode(),
             ContentType="application/json",
         )
 
@@ -58,19 +73,18 @@ def start_ingestion(agent: AgentsforBedrockClient, knowledge_base_id: str, data_
 
 
 def wait_for_ingestion(
-    agent: AgentsforBedrockClient,
-    knowledge_base_id: str,
-    data_source_id: str,
-    job_id: str,
-    poll_s: float = POLL_S,
-    sleep: Callable[[float], None] = time.sleep,
-) -> IngestionJob:
+    agent: AgentsforBedrockClient, knowledge_base_id: str, data_source_id: str, job_id: str
+) -> IngestionJobTypeDef:
     while True:
-        response = agent.get_ingestion_job(
+        job = agent.get_ingestion_job(
             knowledgeBaseId=knowledge_base_id, dataSourceId=data_source_id, ingestionJobId=job_id
-        )
-        job = IngestionJob.model_validate(response["ingestionJob"])
-        log.info("ingestion %s %s", job.status, job.statistics.model_dump_json())
-        if job.finished:
+        )["ingestionJob"]
+        log.info("ingestion %s %s", job["status"], job.get("statistics"))
+        if job["status"] in FINISHED:
             return job
-        sleep(poll_s)
+        time.sleep(10)
+
+
+def succeeded(job: IngestionJobTypeDef) -> bool:
+    failed = job.get("statistics", {}).get("numberOfDocumentsFailed", 0)
+    return job["status"] == "COMPLETE" and failed == 0

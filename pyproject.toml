@@ -4,26 +4,18 @@ version = "0.2.0"
 description = "Customer-support RAG on Amazon Bedrock in AWS Sydney"
 requires-python = ">=3.13,<3.14"
 dependencies = [
-    "anyio>=4.15.1",
     "aws-lambda-powertools>=3.35.0",
-    "aws-opentelemetry-distro>=0.21.0",
     "boto3>=1.43.108",
-    "fastapi>=0.142.2",
     "openai[bedrock]>=3.24.0",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
     "python-ulid>=4.0.1",
-    "types-boto3-lite[bedrock-agent,bedrock-agent-runtime,dynamodb,s3]>=1.43.0",
-    "uvicorn>=0.54.0",
+    "types-boto3-lite[bedrock-agent,bedrock-agent-runtime,bedrock-runtime,dynamodb,s3]>=1.43.0",
 ]
 
 [dependency-groups]
 dev = [
-    "httpx>=0.28.1",
-    "moto[dynamodb,s3]>=5.2.3",
     "pyright>=1.1.414",
-    "pytest>=9.1.1",
-    "pytest-asyncio>=1.4.0",
     "ruff>=0.16.10",
 ]
 scripts = [
@@ -40,13 +32,6 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/rag", "src/ask"]
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["tests"]
-asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "function"
-asyncio_default_test_loop_scope = "function"
-
 [tool.ruff]
 line-length = 120
 target-version = "py313"
@@ -57,7 +42,7 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF", "N", "ASYNC"]
 [tool.pyright]
 typeCheckingMode = "strict"
 pythonVersion = "3.13"
-include = ["src", "scripts", "tests"]
-extraPaths = ["src", "tests"]
+include = ["src", "scripts"]
+extraPaths = ["src"]
 venvPath = "."
 venv = ".venv"

@@ -17,8 +17,7 @@ uv pip install --quiet \
     --only-binary :all:
 
 cp -R "$root/src/rag" "$build/ask/rag"
-cp "$root/src/ask/main.py" "$root/src/ask/run.sh" "$build/ask/"
-chmod +x "$build/ask/run.sh"
+cp "$root/src/ask/main.py" "$build/ask/"
 find "$build/ask" -name "__pycache__" -type d -prune -exec rm -rf {} +
 
 size_mb=$(du -sm "$build/ask" | cut -f1)

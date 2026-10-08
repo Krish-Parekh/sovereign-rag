@@ -1,6 +1,10 @@
 locals {
-  web_adapter_layer = "arn:aws:lambda:${var.region}:753240598075:layer:LambdaAdapterLayerArm64:30"
-  qwen_arn          = "arn:aws:bedrock:${var.region}::foundation-model/qwen.qwen3-32b-v1:0"
+  qwen_arn = "arn:aws:bedrock:${var.region}::foundation-model/qwen.qwen3-32b-v1:0"
+}
+
+resource "aws_cloudwatch_log_group" "ask" {
+  name              = "/aws/lambda/${local.name}-ask"
+  retention_in_days = 14
 }
 
 data "archive_file" "ask" {
@@ -76,9 +80,9 @@ data "aws_iam_policy_document" "ask" {
   }
 
   statement {
-    sid       = "XrayNoResourceLevel"
-    actions   = ["xray:PutTraceSegments", "xray:PutTelemetryRecords", "xray:PutSpans"]
-    resources = ["*"]
+    sid       = "Guardrail"
+    actions   = ["bedrock:ApplyGuardrail"]
+    resources = [aws_bedrock_guardrail.ask.guardrail_arn]
 
     condition {
       test     = "StringEquals"
@@ -98,35 +102,19 @@ resource "aws_lambda_function" "ask" {
   role             = aws_iam_role.ask.arn
   runtime          = "python3.13"
   architectures    = ["arm64"]
-  handler          = "run.sh"
+  handler          = "main.handler"
   filename         = data.archive_file.ask.output_path
   source_code_hash = data.archive_file.ask.output_base64sha256
   memory_size      = 1024
-  timeout          = 300
-  layers           = [local.web_adapter_layer]
-
-  tracing_config {
-    mode = "Active"
-  }
+  timeout          = 60
 
   environment {
     variables = {
-      AWS_LAMBDA_EXEC_WRAPPER                            = "/opt/bootstrap"
-      AWS_LWA_INVOKE_MODE                                = "response_stream"
-      AWS_LWA_PORT                                       = "8080"
-      PYTHONUNBUFFERED                                   = "1"
-      KNOWLEDGE_BASE_ID                                  = aws_bedrockagent_knowledge_base.help_centre.id
-      CHAT_TABLE                                         = aws_dynamodb_table.chat.name
-      CHAT_MODEL                                         = var.chat_model
-      OTEL_PYTHON_DISTRO                                 = "aws_distro"
-      OTEL_PYTHON_CONFIGURATOR                           = "aws_configurator"
-      OTEL_EXPORTER_OTLP_PROTOCOL                        = "http/protobuf"
-      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT                 = "https://xray.${var.region}.amazonaws.com/v1/traces"
-      OTEL_TRACES_EXPORTER                               = "otlp"
-      OTEL_METRICS_EXPORTER                              = "none"
-      OTEL_LOGS_EXPORTER                                 = "none"
-      OTEL_SERVICE_NAME                                  = "${local.name}-ask"
-      OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "false"
+      KNOWLEDGE_BASE_ID = aws_bedrockagent_knowledge_base.help_centre.id
+      CHAT_TABLE        = aws_dynamodb_table.chat.name
+      CHAT_MODEL        = var.chat_model
+      GUARDRAIL_ID      = aws_bedrock_guardrail.ask.guardrail_id
+      GUARDRAIL_VERSION = aws_bedrock_guardrail_version.ask.version
     }
   }
 
@@ -176,9 +164,7 @@ resource "aws_api_gateway_integration" "ask" {
   http_method             = aws_api_gateway_method.ask.http_method
   type                    = "AWS_PROXY"
   integration_http_method = "POST"
-  uri                     = aws_lambda_function.ask.response_streaming_invoke_arn
-  response_transfer_mode  = "STREAM"
-  timeout_milliseconds    = 300000
+  uri                     = aws_lambda_function.ask.invoke_arn
 }
 
 resource "aws_lambda_permission" "api" {
@@ -207,10 +193,9 @@ resource "aws_api_gateway_deployment" "api" {
 }
 
 resource "aws_api_gateway_stage" "v1" {
-  rest_api_id          = aws_api_gateway_rest_api.api.id
-  deployment_id        = aws_api_gateway_deployment.api.id
-  stage_name           = "v1"
-  xray_tracing_enabled = true
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  deployment_id = aws_api_gateway_deployment.api.id
+  stage_name    = "v1"
 }
 
 resource "aws_api_gateway_api_key" "tester" {
@@ -226,13 +211,17 @@ resource "aws_api_gateway_usage_plan" "tester" {
   }
 
   throttle_settings {
-    rate_limit  = 1
-    burst_limit = 2
+    rate_limit  = var.api_rate_limit
+    burst_limit = var.api_burst_limit
   }
 
-  quota_settings {
-    limit  = 500
-    period = "DAY"
+  dynamic "quota_settings" {
+    for_each = var.api_daily_quota > 0 ? [var.api_daily_quota] : []
+
+    content {
+      limit  = quota_settings.value
+      period = "DAY"
+    }
   }
 }
 
