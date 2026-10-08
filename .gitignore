@@ -18,4 +18,3 @@ docs/*
 !/README.md
 
 .tryout/
-scripts/tryout.py

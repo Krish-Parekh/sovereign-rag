@@ -11,3 +11,47 @@ Sovereign RAG is a customer-support assistant. It answers questions from Wix hel
 - **Answer:** The Knowledge Base finds the 5 best chunks in S3 Vectors. Qwen3 32B writes an answer that cites these chunks. The Lambda function returns the full answer as JSON.
 - **History:** DynamoDB keeps the masked chat turns for 30 days.
 - **Corpus:** `prepare_corpus.py` uploads 563 WixQA documents and starts an ingestion job. Titan V2 embeds the documents.
+
+## Try it
+
+`scripts/tryout.py` is the fastest way to get a feel for the project. It creates a customer user and a staff user, signs you in through the browser, sends questions to the real API and runs the security checks. You do not need to copy tokens or write `curl` commands.
+
+You need AWS credentials for `ap-southeast-2`, `uv`, Terraform, and an S3 bucket for the Terraform state. Copy `infra/backend.hcl.example` to `infra/backend.hcl` and `infra/terraform.tfvars.example` to `infra/terraform.tfvars`, then fill them in.
+
+1. Deploy the stack and load the corpus:
+
+   ```bash
+   ./scripts/build.sh
+   terraform -chdir=infra init -backend-config=backend.hcl
+   terraform -chdir=infra apply
+   uv run python scripts/prepare_corpus.py \
+     --bucket "$(terraform -chdir=infra output -raw docs_bucket)" \
+     --knowledge-base-id "$(terraform -chdir=infra output -raw knowledge_base_id)" \
+     --data-source-id "$(terraform -chdir=infra output -raw data_source_id)"
+   ```
+
+2. Run all checks. A browser tab opens for each user, with the email already filled in. The terminal shows the password to type.
+
+   ```bash
+   uv run python scripts/tryout.py check
+   ```
+
+3. Ask your own questions:
+
+   ```bash
+   uv run python scripts/tryout.py ask "What are the steps to create an online store?"
+   uv run python scripts/tryout.py ask "How do I add staff members in Wix Bookings?"
+   uv run python scripts/tryout.py ask "Form fields are shown in multiple languages" --user staff
+   uv run python scripts/tryout.py ask "and how long does that take?" --conversation-id <id>
+   uv run python scripts/tryout.py users
+   ```
+
+   `--user staff` asks as a staff user, who also sees known issues. `--conversation-id` continues a conversation. `users` resets both passwords.
+
+4. Destroy the stack when you finish:
+
+   ```bash
+   terraform -chdir=infra destroy
+   ```
+
+The corpus is a sample of 563 WixQA documents. If no document covers a question, the assistant says so and does not guess.
