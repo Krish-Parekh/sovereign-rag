@@ -11,9 +11,3 @@ Sovereign RAG is a customer-support assistant. It answers questions from Wix hel
 - **Answer:** The Knowledge Base finds the 5 best chunks in S3 Vectors. Qwen3 32B writes an answer that cites these chunks. The Lambda function returns the full answer as JSON.
 - **History:** DynamoDB keeps the masked chat turns for 30 days.
 - **Corpus:** `prepare_corpus.py` uploads 563 WixQA documents and starts an ingestion job. Titan V2 embeds the documents.
-
-## Trade-offs
-
-- The answer comes back in one piece after about 1 to 2 seconds. It does not stream word by word, because the guardrail must check the full answer first.
-- Masking also hides business addresses in answers. For example, `support@wix.com` shows as `{EMAIL}`.
-- The stack has no tracing, metrics or alerts. We destroy the stack after each test.

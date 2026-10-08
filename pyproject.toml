@@ -10,7 +10,7 @@ dependencies = [
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
     "python-ulid>=4.0.1",
-    "types-boto3-lite[bedrock-agent,bedrock-agent-runtime,bedrock-runtime,dynamodb,s3]>=1.43.0",
+    "types-boto3-lite[bedrock-agent,bedrock-agent-runtime,bedrock-runtime,cognito-idp,dynamodb,s3]>=1.43.0",
 ]
 
 [dependency-groups]
